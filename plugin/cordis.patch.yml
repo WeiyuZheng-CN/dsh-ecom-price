@@ -1,0 +1,10 @@
+# Bundle patch layer for dsh-plugin-ecom-price.
+#
+# A bundle's entries are not part of the base profile tree, so they must be
+# inserted (a bare `- id: ...` would fail with "patch: entry not found").
+- insert:
+    - id: ecom-price
+      name: dsh-plugin-ecom-price
+      config:
+        host: 127.0.0.1
+        port: 9222

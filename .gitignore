@@ -1,0 +1,21 @@
+# 浏览器专用 profile（由 launch-edge-cdp.ps1 生成）
+edge-profile/
+
+# 抓取产物与报表
+items*.json
+*-results.json
+tb[0-9]*-results.json
+比价表*.xlsx
+checks.json
+*.tmp
+
+# 清单原文（含个人采购信息，不要提交）
+*.xlsx
+!docs/*.xlsx
+
+# 系统
+.DS_Store
+Thumbs.db
+__pycache__/
+*.pyc
+node_modules/
