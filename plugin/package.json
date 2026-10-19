@@ -1,11 +1,11 @@
 {
   "name": "dsh-plugin-ecom-price",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "type": "module",
   "main": "lib/index.js",
-  "description": "Drive the user's logged-in browser over CDP to read real Taobao prices: search candidates, per-item true price, browser/login status.",
-  "keywords": ["dsh-plugin", "deepseek-harness", "taobao", "cdp", "price", "e-commerce"],
+  "description": "Drive the user's logged-in browser over CDP to read real Taobao/JD prices: search candidates, SKU-level price per spec, fuzzy-price detection, browser/login status.",
+  "keywords": ["dsh-plugin", "deepseek-harness", "taobao", "jd", "cdp", "price", "sku", "e-commerce"],
   "license": "MIT",
   "engines": {
     "node": ">=22"

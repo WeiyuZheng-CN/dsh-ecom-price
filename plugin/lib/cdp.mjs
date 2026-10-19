@@ -205,17 +205,97 @@ export const taobaoListExpr = (limit) => `(() => {
 export const taobaoItemExpr = `(() => {
   const norm = (s) => (s || '').replace(/\\s+/g, ' ').trim();
   const unit = document.querySelector('[class*="unit--"]');
-  const box = unit?.parentElement ? norm(unit.parentElement.innerText) : '';
-  const m = box.match(/￥\\s*([\\d.,]+)(?:\\s*[-~]\\s*([\\d.,]+))?/);
+  // digits get split into spans ("￥4 . 08") and some shops mask them ("￥4.??")
+  const box = unit?.parentElement ? norm(unit.parentElement.innerText).replace(/\\s+/g, '') : '';
+  const m = box.match(/￥([\\d.,?]+)(?:[-~]([\\d.,?]+))?/);
+  const price = m ? (m[2] ? m[1] + '-' + m[2] : m[1]) : null;
   const isShop = (h) => { const i = h.indexOf('://'); if (i < 0) return false; const r = h.slice(i + 3); return r.startsWith('shop') && r.indexOf('.taobao.com') > 0; };
   const sl = [...document.querySelectorAll('a[href*="taobao.com"]')].find((a) => isShop(a.href));
   const shop = sl ? norm(sl.innerText).replace(/\\s*[\\d.]+\\s*(88VIP|好评).*$/, '').trim().slice(0, 26) : null;
   const body = norm(document.body.innerText);
+  const title = document.title || '';
   return {
-    title: document.title.replace(/-淘宝网$/, ''),
-    price: m ? (m[2] ? m[1] + '-' + m[2] : m[1]) : null,
+    title: title.replace(/-淘宝网$/, ''),
+    price,
     priceRaw: box.slice(0, 24) || null,
+    masked: !!(price && price.includes('?')),
     shop,
-    loginWall: /亲，请登录/.test(body.slice(0, 200)),
+    loginWall: /login\\.taobao\\.com|havanaone/.test(location.href) || /亲，请登录|手机扫码登录/.test(body.slice(0, 200)),
+    captcha: /验证码/.test(title) || /拖放到指定区域/.test(body.slice(0, 200)),
   };
 })()`;
+
+/**
+ * The whole SKU table of a Taobao/Tmall item: every spec and its own price.
+ *
+ * The listing/search price is the CHEAPEST sku of a link (often labelled 起).
+ * A purchase list asks "how much is 500ml" — that needs skuBase × sku2info.
+ * Data is SSR-injected but only complete after hydration, so poll.
+ *
+ * Caveat: shops with fuzzy pricing mask the digits ("4.??", "2?", "1??") even
+ * here. Leading digits still give the magnitude; exact value is unavailable.
+ */
+export const taobaoSkuExpr = `(async () => {
+  const norm = (s) => (s || '').replace(/\\s+/g, ' ').trim();
+  const getRes = () => {
+    try {
+      const c = window.__ICE_APP_CONTEXT__;
+      return c && c.loaderData && c.loaderData.home && c.loaderData.home.data && c.loaderData.home.data.res;
+    } catch { return null; }
+  };
+  const deadline = Date.now() + 15000;
+  let res = getRes();
+  while (!res && Date.now() < deadline) { await new Promise((r) => setTimeout(r, 500)); res = getRes(); }
+  const unitEl = document.querySelector('[class*="unit--"]');
+  const pagePrice = unitEl && unitEl.parentElement ? norm(unitEl.parentElement.innerText).slice(0, 40) : null;
+  if (!res) {
+    const title = document.title || '';
+    const body = norm(document.body.innerText).slice(0, 200);
+    return {
+      ok: false,
+      title,
+      url: location.href,
+      pagePrice,
+      reason: /验证码/.test(title) ? 'captcha'
+        : /login\\.taobao\\.com|havanaone/.test(location.href) || /扫码登录|亲，请登录/.test(body) ? 'login_wall'
+        : 'no_ice_data',
+    };
+  }
+  const valName = {};
+  const props = (res.skuBase?.props || []).map((p) => {
+    (p.values || []).forEach((v) => { valName[p.pid + ':' + v.vid] = { g: p.name, n: v.name }; });
+    return { name: p.name, values: (p.values || []).map((v) => v.name) };
+  });
+  const info = (res.skuCore && res.skuCore.sku2info) || {};
+  const skus = (res.skuBase?.skus || []).map((s) => {
+    const attrs = String(s.propPath || '').split(';').filter(Boolean).map((kv) => {
+      const [pid, vid] = kv.split(':');
+      const hit = valName[pid + ':' + vid];
+      return hit ? hit.n : kv;
+    });
+    const i = info[s.skuId] || {};
+    const pt = i.price?.priceText ?? null;
+    return {
+      attrs: attrs.join(' / '),
+      price: pt,
+      masked: !!(pt && pt.includes('?')),
+      stock: i.quantityText || null,
+    };
+  });
+  const real = skus.filter((s) => s.price && !s.masked).map((s) => Number(s.price)).filter((n) => n > 0);
+  return {
+    ok: true,
+    title: document.title,
+    url: location.href,
+    shop: res.seller?.shopName || res.seller?.sellerNick || null,
+    itemId: res.item?.itemId || null,
+    props,
+    skus,
+    skuCount: skus.length,
+    maskedCount: skus.filter((s) => s.masked).length,
+    minReal: real.length ? Math.min(...real) : null,
+    maxReal: real.length ? Math.max(...real) : null,
+    pagePrice,
+  };
+})()`;
+
