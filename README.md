@@ -55,6 +55,7 @@ Copy-Item skills\ecom-price-compare "$env:USERPROFILE\.dsh\skills\" -Recurse
 
 # 2. 开一个带调试端口的浏览器（独立 profile，Chromium 136+ 拒绝默认目录）
 powershell -File "$env:USERPROFILE\.dsh\skills\ecom-price-compare\scripts\launch-edge-cdp.ps1"
+# Linux / macOS 用：./launch-chrome-cdp.sh
 # 在这个窗口里登录淘宝，之后长期有效
 
 # 3. 清单 → items.json
@@ -117,7 +118,8 @@ skills/ecom-price-compare/         DSH skill
     ├── sku.mjs                    点选式取价（京东 / 要眼见为实）
     ├── probe.mjs + probe-page.js  单页 DOM 探测（改版时先看它）
     ├── cdp.mjs                    驱动：list/open/eval/text/click/cookies/shot/taobao/item
-    ├── launch-edge-cdp.ps1        独立 profile 启动 Edge 并开调试端口
+    ├── launch-edge-cdp.ps1        独立 profile 启动 Edge 并开调试端口（Windows）
+    ├── launch-chrome-cdp.sh       同上，Linux / macOS
     ├── extract-taobao.js          淘宝列表抽取（含卡片全文）
     ├── scrape-tb.mjs              淘宝批量：搜索 → 选品 → 进详情取真价
     ├── jd-extract.js              京东列表抽取（sku 藏在客服链接的 pid 参数里）
@@ -146,10 +148,16 @@ skills/ecom-price-compare/         DSH skill
 
 ## 环境
 
-- Windows（脚本用 PowerShell 启动浏览器；CDP 部分本身跨平台）
-- Edge 或 Chrome，版本 ≥ 136（调试端口的限制就来自这个版本）
+- **Windows / Linux / macOS**。启动浏览器：Windows 用 `launch-edge-cdp.ps1`（PowerShell），Linux/macOS 用 `launch-chrome-cdp.sh`（bash）。CDP 部分本身跨平台
+- Chrome / Chromium / Edge / Brave / Vivaldi，版本 ≥ 136（调试端口的限制就来自这个版本）。**Firefox 不行**，它不说 CDP
 - Node.js ≥ 22（内置 WebSocket，不用装包）
-- Python + `openpyxl`（只用于出表）
+- Python + `openpyxl`（只用于读清单和出表；抓价链路不需要）
+
+`openpyxl` 只被 3 个 Python 脚本用到，`.mjs` 抓价脚本零依赖：
+
+```sh
+uv pip install --system openpyxl     # 或 pip install openpyxl
+```
 
 ## 边界
 

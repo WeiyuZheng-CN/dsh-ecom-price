@@ -45,8 +45,11 @@ async function waitBrowser(timeoutMs = 20000) {
       await sleep(300);
     }
   }
+  const launcher = process.platform === 'win32'
+    ? 'powershell -File launch-edge-cdp.ps1'
+    : './launch-chrome-cdp.sh';
   throw new Error(
-    `No CDP endpoint at ${BASE}.\nStart the browser first:  powershell -File launch-edge-cdp.ps1\n${last?.message ?? ''}`,
+    `No CDP endpoint at ${BASE}.\nStart the browser first:  ${launcher}\n${last?.message ?? ''}`,
   );
 }
 

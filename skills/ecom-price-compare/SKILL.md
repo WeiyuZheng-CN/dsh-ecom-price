@@ -43,12 +43,23 @@ node scripts/cdp.mjs cookies 'https://www.jd.com'      | Select-String jdLoggedI
 端口没起来就先开浏览器：
 
 ```powershell
+# Windows（Edge）
 powershell -File scripts/launch-edge-cdp.ps1              # 可见窗口，用于扫码
 powershell -File scripts/launch-edge-cdp.ps1 -Headless    # 抓数用，不抢窗口
 powershell -File scripts/launch-edge-cdp.ps1 -Fresh       # 重建专用 profile
 ```
 
-**注意**：不能用用户已经在开的那个浏览器窗口（CDP 无法事后挂载），也不能用默认 user-data-dir（Chromium 136+ 直接拒绝调试端口）。脚本用独立目录 `scripts/edge-profile`，登录一次后长期复用。
+```sh
+# Linux / macOS（Chrome、Chromium、Brave、Edge、Vivaldi 均可）
+./scripts/launch-chrome-cdp.sh              # 可见窗口，用于扫码
+./scripts/launch-chrome-cdp.sh --headless   # 抓数用，不抢窗口
+./scripts/launch-chrome-cdp.sh --fresh      # 重建专用 profile
+./scripts/launch-chrome-cdp.sh --browser /path/to/chrome   # 指定浏览器
+```
+
+两个脚本参数语义一致，都用独立目录 `scripts/edge-profile`。**Firefox 不行**：这套工具说的是 Chrome DevTools Protocol。
+
+**注意**：不能用用户已经在开的那个浏览器窗口（CDP 无法事后挂载），也不能用默认 user-data-dir（Chromium 136+ 直接拒绝调试端口）。登录一次后长期复用。
 
 **登录态会中途掉**（长跑抓取后、或误入 H5/登录跳转后）。批量抓取前先查一次 cookie，长任务中间再查一次；掉了就停下来让用户扫码，别把空列表当"反爬限流"。
 
@@ -150,7 +161,8 @@ python scripts/make_report.py --items items.json `
 | 文件 | 作用 |
 |---|---|
 | `scripts/cdp.mjs` | CDP 驱动：list/open/eval/text/click/type/cookies/shot/front/taobao/item |
-| `scripts/launch-edge-cdp.ps1` | 独立 profile 启动 Edge 并开调试端口 |
+| `scripts/launch-edge-cdp.ps1` | 独立 profile 启动 Edge 并开调试端口（Windows） |
+| `scripts/launch-chrome-cdp.sh` | 同上，Linux / macOS，自动探测 Chrome/Chromium/Brave/Edge/Vivaldi |
 | `scripts/extract-taobao.js` | 淘宝列表页抽取（含卡片全文，供关键词匹配） |
 | `scripts/scrape-tb.mjs` | 淘宝批量：搜索 → 选品 → 进详情取真价 |
 | `scripts/jd-extract.js` / `scrape-jd.mjs` | 京东批量：列表页直接取价（sku 藏在客服链接 pid 参数里） |

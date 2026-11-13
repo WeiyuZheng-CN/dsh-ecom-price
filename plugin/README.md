@@ -69,16 +69,26 @@ shop_sku_price { item: "https://detail.tmall.com/item.htm?id=...", spec: "500ml 
 | 部分 | 状态 |
 |---|---|
 | `lib/cdp.mjs`（CDP 客户端 + 三个抽取器） | ✅ **已实测**：真实浏览器上跑通「搜索取候选 → 商品页首屏价 → SKU 全表」。SKU 抽取器在一次 38 行墙绘清单上跑过 19 个淘宝链接，并据此抓出 16 处「价 ≠ 规格价」 |
-| `lib/index.js` 的工具逻辑 | ✅ **已用桩跑通**：把 `@deepseek-ai/dsh-tools` 换成 `defineTool = (cfg) => cfg` 的桩后，`apply()` 注册出 5 个工具，schema 均为 `type: object` 且根节点无 `required` 数组；5 个 `render()` 对正常/打码/失败三套入参均不抛错；`shop_browser_status` 与 `shop_sku_price` 的 `execute()` 真连浏览器跑通（后者在淘宝掉登录时正确返回 `reason=login_wall`） |
-| 插件注册胶水在真实 `@deepseek-ai/dsh-tools` 下的加载 | ⚠️ **未加载验证**：本会话无法重启宿主。桩测试只证明了自己的代码没写错，不等于真实 `defineTool` 的校验全过 |
+| `lib/index.js` 的工具逻辑 | ✅ **已用桩跑通**：把 `@deepseek-ai/dsh-tools` 换成 `defineTool = (cfg) => cfg` 的桩后，`apply()` 注册出 5 个工具；5 个 `render()` 对正常/打码/失败三套入参均不抛错；`shop_browser_status` 与 `shop_sku_price` 的 `execute()` 真连浏览器跑通（后者在淘宝掉登录时正确返回 `reason=login_wall`） |
+| 输出契约（真实 `defineTool` + 宿主校验） | ✅ **已实测**：`node --test plugin/test/` 用真实的 `defineTool`、`snapshotJsonValue`、`validateJsonSchemaValue` 跑 14 条断言，覆盖 5 个工具的成功/失败/打码/掉登录各路径 |
+| 插件在真实宿主里的加载 | ⚠️ **仍未验证**：需要重启宿主。输出契约已按宿主规则验证，但 profile 解析、`cordis.patch.yml` 插入、工具出现在模型工具表里这三步只能靠实际启动确认 |
 
-> `shop_sku_price` 的**成功路径**（真的返回某规格的价格）目前是用 skill 里同逻辑的 `scripts/audit.mjs` 在真实页面上验证的；插件侧只在掉登录态下验证了失败路径。等淘宝登录态恢复、宿主重启后可再补一次成功路径的实测。
+> **桩测试曾经漏掉两个真 bug**（已修，见下）。`defineTool = (cfg) => cfg` 不做任何校验，所以「schema 缺字段」和「返回值含 `undefined`」在桩下完全隐形。现在的测试跑真实校验规则，并且**在原代码上会失败 4 条**——这是它有效的证据。
+
+### 已修复：两个让工具在真实宿主里报错的缺陷
+
+| 缺陷 | 症状 | 修法 |
+|---|---|---|
+| 4 个 output schema 缺 `reason` | 失败路径返回 `{ok:false, reason, message}`，被 `additionalProperties: false` 拒绝：`"value.reason" is not a declared property` | 给 `shop_browser_status` / `shop_search` / `shop_price` / `shop_open` 补 `reason: { type: 'string' }` |
+| 可选字段写成 `undefined` | 宿主把结果快照成无损 JSON，遇到任何 `undefined` 整体拒绝：`value is not lossless JSON`。`shop_price` 读到价时 `message` 必为 `undefined`，**成功路径 100% 失败**；`shop_sku_price` 不传 `spec` 时同理 | 所有 `execute()` 经 `registerTool` 包装，出口统一 `compact()` 剥掉 `undefined` 键 |
+
+`shop_sku_price` 的**成功路径**（真的返回某规格的价格）目前是用 skill 里同逻辑的 `scripts/audit.mjs` 在真实页面上验证的；插件侧只在掉登录态下验证了失败路径。等淘宝登录态恢复、宿主重启后可再补一次成功路径的实测。
 
 安装后若工具没出现，按这个顺序查：
 
 1. `cordis.patch.yml` 里必须有 `- insert:`，漏了会报 `patch: entry "..." not found`
 2. `@deepseek-ai/dsh-tools` 在你的 profile 里要能解析（`import { defineTool }` 来自它）
-3. 输出 schema 的**根节点**不能有 `required` 数组，且必须是 `type: object`（属性级 `required: true` 可以）
+3. 输出 schema 必须是 `type: object`；属性级 `required: true` 会被编译成根节点 `required` 数组，这是正常的
 
 如果插件路线一时跑不通，**先用 skill 里的 CLI**，那是已经跑通的：
 
@@ -87,6 +97,24 @@ node "<本仓库本地路径>/skills/ecom-price-compare/scripts/cdp.mjs" list
 node "<本仓库本地路径>/skills/ecom-price-compare/scripts/audit.mjs" urls.json aud.json   # SKU 级核价
 node "<本仓库本地路径>/skills/ecom-price-compare/scripts/scrape-tb.mjs" --items items.json --out tb.json --batch 8
 ```
+
+## 跑测试
+
+```sh
+cd plugin
+npm test          # node --test "test/*.test.mjs"
+```
+
+测试需要 `@deepseek-ai/dsh-tools` 和 `@deepseek-ai/dsh-util-values` 可解析。它们不是本包的依赖，从你的 DSH 安装里取：
+
+```sh
+# 指向任意一份 DSH checkout 或安装目录
+mkdir -p node_modules/@deepseek-ai
+ln -s <dsh>/packages/core/tools        node_modules/@deepseek-ai/dsh-tools
+ln -s <dsh>/packages/util/values       node_modules/@deepseek-ai/dsh-util-values
+```
+
+`node_modules/` 已被 `.gitignore` 排除，符号链接不会进仓库。
 
 ## 边界与坑
 
