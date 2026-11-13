@@ -11,11 +11,21 @@ Get-CimInstance Win32_Process -Filter "Name='msedge.exe'" |
   Where-Object { $_.CommandLine -match 'remote-debugging-port' } | Measure-Object   # 0 就是没开
 ```
 
+```sh
+# Linux / macOS
+pgrep -af 'remote-debugging-port' | grep -v grep    # 空就是没开
+```
+
 **Chromium 136+ 拒绝「默认 user-data-dir + 调试端口」组合**，报错大意是 “DevTools remote debugging requires a non-default data directory”。所以必须用独立目录；独立目录拿不到原 profile 的登录态，代价是**要重新扫码一次**。
 
 **Edge 首启会抢页面。** 新 profile 第一次启动会弹「同步浏览数据」全屏页，把目标页顶掉，表现为 `document.title` 变成一段同步文案。`launch-edge-cdp.ps1` 里加了 `--disable-sync` 和抑制 FRE 的 feature 开关解决。
 
 **权限弹窗会插进 target 列表。** 淘宝会弹「访问此设备上的其他应用和服务」，它是 `edge://permission-request-dialog/` 类型、排在 `page` 列表第一位，会让「取第一个 page」的逻辑导航错对象。`cdp.mjs` 里 `pickTarget` 已过滤非 http(s) 页面。
+
+**Linux 实测（2026-11，Chrome 154 / Manjaro）**：`launch-chrome-cdp.sh` + `cdp.mjs` 全链路可用——`version` / `list` / `open` / `eval` 均正常，插件侧 `shop_browser_status`、`shop_open` 也跑通。两点注意：
+
+- **浏览器必须比启动它的 shell 活得久**。在带 `--die-with-parent` 的沙箱里（某些容器、CI、agent 执行环境），`&` 后台化后 shell 一退出浏览器就被回收，表现为「启动成功、几秒后 `ECONNREFUSED`」。脚本用 `setsid` + `disown` 脱离会话；真实终端里通常不需要，但沙箱里必须。
+- **Firefox 不行**。这套工具说的是 Chrome DevTools Protocol，Firefox 的 remote debugging 是另一套协议。
 
 ## 二、登录态（最重要的一条）
 
